@@ -137,7 +137,7 @@ def scaling(samples):
 
 # Inicializar los parámetros
 params = [0] * (len(samples[0]) + 1)  # n+1 porque añadimos la columna de unos
-alfa = 0.01
+alfa = 0.1
 epochs = 0
 
 # Agregar una columna de unos (para el término independiente)
@@ -153,21 +153,21 @@ for i in range(len(samples)):
     else:
         samples[i] = [1, samples[i]]
 
-print("Original samples:")
-print(samples)
+#print("Original samples:")
+#print(samples)
 
-print("Original samples:")
-print(samples)
+#print("Original samples:")
+#print(samples)
 while True:
     oldparams = list(params)
-    print("params")
+    #print("params")
     params = GD(params, samples, y, alfa)
     show_error(params, samples, y)
-    print("params")
+    #print("params")
     epochs += 1
-    if oldparams == params or epochs == 2:  # Limitar a 1000 epochs para evitar bucle infinito
-        print("samples:")
-        print(samples)
+    if oldparams == params or epochs == 1000:  # Limitar a 1000 epochs para evitar bucle infinito
+        #print("samples:")
+        #print(samples)
         print("final params:")
         print(params)
         break
@@ -175,7 +175,7 @@ while True:
 import matplotlib.pyplot as plt
 # Visualizar la gráfica de errores
 plt.plot(__erros__)
-plt.xlabel('Iterations')
+plt.xlabel('Epochs')
 plt.ylabel('Mean Squared Error')
-plt.title('Error during Gradient Descent')
+plt.title('Error vs Epochs')
 plt.show()
