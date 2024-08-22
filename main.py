@@ -1,10 +1,26 @@
 import pandas as pd
 import numpy
 import numpy as np
-
+import matplotlib.pyplot as plt
+import random
 #columns = ["DateTime","Temperature","Humidity","Wind Speed","general diffuse flows","diffuse flows","Zone 1 Power Consumption","Zone 2  Power Consumption","Zone 3  Power Consumption"]
 
 df = pd.read_csv('Tetuan City power consumption.csv')
+# Convertir la columna 'DateTime' a tipo datetime si no lo has hecho
+df['DateTime'] = pd.to_datetime(df['DateTime'])
+
+# Extraer el mes y el año de la columna 'DateTime'
+df['Month'] = df['DateTime'].dt.month
+df['Year'] = df['DateTime'].dt.year
+
+# Agrupar por año y mes, y luego sumar el consumo de energía en la Zona 1 para cada mes
+monthly_consumption = df.groupby(['Year', 'Month'])['Zone 1 Power Consumption'].sum().reset_index()
+
+# Ordenar los resultados por consumo de energía de mayor a menor
+top_5_months = monthly_consumption.sort_values(by='Zone 1 Power Consumption', ascending=False).head(5)
+
+# Mostrar los 5 meses con mayor consum
+print(top_5_months)
 
 print(df.head())
 df.info()
@@ -21,7 +37,25 @@ print(vacio[vacio > 0])
 filas_vacias = df[df.isnull().any(axis=1)]
 print(filas_vacias)
 
-df = df.drop(columns=['Zone 2  Power Consumption', 'Zone 3  Power Consumption'])
+df['DateTime'] = pd.to_datetime(df['DateTime'])
+
+# Extraer características temporales
+df['Hour'] = df['DateTime'].dt.hour
+df['Minute'] = df['DateTime'].dt.minute
+df['Day'] = df['DateTime'].dt.day
+df['Month'] = df['DateTime'].dt.month
+df['DayOfWeek'] = df['DateTime'].dt.dayofweek
+
+# También puedes agregar características cíclicas para la hora
+df['Hour_sin'] = np.sin(2 * np.pi * df['Hour'] / 24)
+df['Hour_cos'] = np.cos(2 * np.pi * df['Hour'] / 24)
+
+# Normalización de las nuevas características temporales
+df['Hour_normalized'] = df['Hour'] / 24
+df['Minute_normalized'] = df['Minute'] / 60
+
+# Eliminar columnas no necesarias y reordenar
+df = df.drop(columns=['Zone 2  Power Consumption', 'Zone 3  Power Consumption', 'DateTime', 'Hour', 'Minute'])
 
 print(df.head())
 
@@ -57,6 +91,10 @@ print(df[['Humidity','Humidity normalized']].head())
 
 print(df.head())
 
+valor_min = df['Wind Speed'].min()
+valor_max = df['Wind Speed'].max()
+df['Wind Speed normalized'] = (df['Wind Speed'] - df['Wind Speed'].min()) / (df['Wind Speed'].max() - df['Wind Speed'].min())
+
 df.to_csv('Normalización de datos.csv', index=False)
 
 '''
@@ -67,24 +105,13 @@ df = df.drop(columns=['Zone 1 Power Consumption', 'Temperature', 'Humidity'])
 
 df = df.round(3)
 
-columnas_ordenadas = [
-    'DateTime', 
-    'Temperature normalized', 
-    'Humidity normalized', 
-    'Wind Speed', 
-    'general diffuse flows', 
-    'diffuse flows', 
-    'Zone 1 normalized'
-]
-df = df[columnas_ordenadas]
-print(df.head())
 df.to_csv('Normalización de datos.csv', index=False)
 
 '''
 Implementación de la regresión lineal, debido a que mis datos no son clasificados
 '''
+samples = df[['Hour_normalized', 'Minute_normalized', 'Temperature normalized']].values.tolist()
 
-samples = df[['Temperature normalized', 'Humidity normalized', 'Wind Speed', 'general diffuse flows', 'diffuse flows']].values.tolist()
 y = df['Zone 1 normalized'].values.tolist()
 
 __erros__ = []
@@ -165,17 +192,40 @@ while True:
     show_error(params, samples, y)
     #print("params")
     epochs += 1
-    if oldparams == params or epochs == 1000:  # Limitar a 1000 epochs para evitar bucle infinito
+    if oldparams == params or epochs == 1000:
         #print("samples:")
         #print(samples)
         print("final params:")
         print(params)
         break
 
-import matplotlib.pyplot as plt
+
 # Visualizar la gráfica de errores
 plt.plot(__erros__)
 plt.xlabel('Epochs')
 plt.ylabel('Mean Squared Error')
 plt.title('Error vs Epochs')
 plt.show()
+
+
+def calculate_r_squared(params, samples, y):
+    # Calcular las predicciones
+    predictions = [h(params, sample) for sample in samples]
+    
+    # Calcular el valor promedio de y
+    y_mean = np.mean(y)
+    
+    # Calcular la suma del cuadrado del error de predicción (SSE)
+    sse = sum((y_i - pred) ** 2 for y_i, pred in zip(y, predictions))
+    
+    # Calcular la suma total del cuadrado (SST)
+    sst = sum((y_i - y_mean) ** 2 for y_i in y)
+    
+    # Calcular el R^2
+    r_squared = 1 - (sse / sst)
+    
+    return r_squared
+
+# Calcular el coeficiente de determinación R^2
+r_squared_test = calculate_r_squared(params, samples, y)
+print(f"R^2 en el conjunto de prueba: {r_squared_test}")
