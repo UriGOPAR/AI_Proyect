@@ -1,231 +1,276 @@
 import pandas as pd
-import numpy
 import numpy as np
 import matplotlib.pyplot as plt
-import random
-#columns = ["DateTime","Temperature","Humidity","Wind Speed","general diffuse flows","diffuse flows","Zone 1 Power Consumption","Zone 2  Power Consumption","Zone 3  Power Consumption"]
+import seaborn as sns
 
+'''
+Analizar y procesar un dataset de consumo de energía eléctrica en una ciudad
+Conocer la información general del dataset, verificar duplicados y filas vacías
+Convertir la columna 'DateTime' a formato de fecha y hora
+'''
 df = pd.read_csv('Tetuan City power consumption.csv')
-# Convertir la columna 'DateTime' a tipo datetime si no lo has hecho
-df['DateTime'] = pd.to_datetime(df['DateTime'])
 
-# Extraer el mes y el año de la columna 'DateTime'
-df['Month'] = df['DateTime'].dt.month
-df['Year'] = df['DateTime'].dt.year
-
-# Agrupar por año y mes, y luego sumar el consumo de energía en la Zona 1 para cada mes
-monthly_consumption = df.groupby(['Year', 'Month'])['Zone 1 Power Consumption'].sum().reset_index()
-
-# Ordenar los resultados por consumo de energía de mayor a menor
-top_5_months = monthly_consumption.sort_values(by='Zone 1 Power Consumption', ascending=False).head(5)
-
-# Mostrar los 5 meses con mayor consum
-print(top_5_months)
 
 print(df.head())
 df.info()
 
 duplicate = df.duplicated()
-
 filas_duplicadas = df[duplicate]
 print(filas_duplicadas)
 
 vacio = df.isnull().sum()
 print(vacio[vacio > 0])
 
-#Filas vacias
 filas_vacias = df[df.isnull().any(axis=1)]
 print(filas_vacias)
 
 df['DateTime'] = pd.to_datetime(df['DateTime'])
 
-# Extraer características temporales
 df['Hour'] = df['DateTime'].dt.hour
 df['Minute'] = df['DateTime'].dt.minute
 df['Day'] = df['DateTime'].dt.day
 df['Month'] = df['DateTime'].dt.month
 df['DayOfWeek'] = df['DateTime'].dt.dayofweek
 
-# También puedes agregar características cíclicas para la hora
+# Agregar características cíclicas para la hora
 df['Hour_sin'] = np.sin(2 * np.pi * df['Hour'] / 24)
 df['Hour_cos'] = np.cos(2 * np.pi * df['Hour'] / 24)
 
-# Normalización de las nuevas características temporales
+# Normalización de características temporales
 df['Hour_normalized'] = df['Hour'] / 24
 df['Minute_normalized'] = df['Minute'] / 60
 
-# Eliminar columnas no necesarias y reordenar
-df = df.drop(columns=['Zone 2  Power Consumption', 'Zone 3  Power Consumption', 'DateTime', 'Hour', 'Minute'])
 
-print(df.head())
+
+def zona_mayor_consumo(df):
+    # Sumar el consumo total para cada zona
+    consumo_zona_1 = df['Zone 1 Power Consumption'].sum()
+    consumo_zona_2 = df['Zone 2  Power Consumption'].sum()
+    consumo_zona_3 = df['Zone 3  Power Consumption'].sum()
+
+    # Determinar la zona con mayor consumo
+    consumos = {'Zone 1': consumo_zona_1, 'Zone 2': consumo_zona_2, 'Zone 3': consumo_zona_3}
+    zona_max_consumo = max(consumos, key=consumos.get)
+    
+    print(f"La zona con mayor consumo total de energía es: {zona_max_consumo} con un consumo de {consumos[zona_max_consumo]:.2f} unidades.")
+
+    # Seleccionar la columna correspondiente a la zona con mayor consumo
+    columna_zona = f"{zona_max_consumo} Power Consumption"
+
+    # Sumar el consumo de energía por mes para esa zona
+    consumo_por_mes = df.groupby('Month')[columna_zona].sum()
+
+    # Determinar los dos meses con mayor consumo
+    top_2_meses = consumo_por_mes.nlargest(2)
+
+    print(f"Los dos meses con mayor consumo en {zona_max_consumo} son:")
+    for mes, consumo in top_2_meses.items():
+        print(f"Mes: {mes}, Consumo: {consumo:.2f} unidades")
+
+    return zona_max_consumo, top_2_meses
+
+# Llamar a la función con el dataframe
+zona_max_consumo, top_2_meses = zona_mayor_consumo(df)
+
+
 
 '''
-Normalización de los datos
-Con el proposito de que los datos más grandes no influyan en los más pequeños.
+Filtrar los meses por el mes de agosto 
+Eliminar las columnas 'Zone 2 Power Consumption', 'Zone 3 Power Consumption' y 'DateTime'
+Normalizar las características 'Zone 1 Power Consumption', 'Temperature', 'Humidity', 'Wind Speed', 'general diffuse flows' y 'diffuse flows'
 '''
+#df_august = df[df['Month'] == 8]
+#df = df_august.reset_index(drop=True)
+
+meses_seleccionados = [8, 7]
+df_seleccionado = df[df['Month'].isin(meses_seleccionados)].reset_index(drop=True)
+
+
+# Normalización de 'Zone 1 Power Consumption'
 valor_min = df['Zone 1 Power Consumption'].min()
 valor_max = df['Zone 1 Power Consumption'].max()
-'''
-Formula de normalización
-x - min / (max - min)
-
-Consumo total de zona 1 normalizada
-'''
 df['Zone 1 normalized'] = (df['Zone 1 Power Consumption'] - valor_min) / (valor_max - valor_min)
 
-print(df[['Zone 1 Power Consumption','Zone 1 normalized']].head())
-
-#Nomalizar Temperatura
+# Normalización de 'Temperature'
 valor_min = df['Temperature'].min()
 valor_max = df['Temperature'].max()
-
 df['Temperature normalized'] = (df['Temperature'] - valor_min) / (valor_max - valor_min)
-print(df[['Temperature','Temperature normalized']].head())
 
-#Nomalizar Humedad
+# Normalización de 'Humidity'
 valor_min = df['Humidity'].min()
 valor_max = df['Humidity'].max()
-
 df['Humidity normalized'] = (df['Humidity'] - valor_min) / (valor_max - valor_min)
-print(df[['Humidity','Humidity normalized']].head())
 
-print(df.head())
-
+# Normalización de 'Wind Speed'
 valor_min = df['Wind Speed'].min()
 valor_max = df['Wind Speed'].max()
-df['Wind Speed normalized'] = (df['Wind Speed'] - df['Wind Speed'].min()) / (df['Wind Speed'].max() - df['Wind Speed'].min())
+df['Wind Speed normalized'] = (df['Wind Speed'] - valor_min) / (valor_max - valor_min)
 
-df.to_csv('Normalización de datos.csv', index=False)
+# Normalización de 'general diffuse flows'
+valor_min = df['general diffuse flows'].min()
+valor_max = df['general diffuse flows'].max()
+df['general diffuse flows normalized'] = (df['general diffuse flows'] - valor_min) / (valor_max - valor_min)
 
-'''
-Editar csv eliminando comolunas no normalizadas
-'''
+# Normalización de 'diffuse flows'
+valor_min = df['diffuse flows'].min()
+valor_max = df['diffuse flows'].max()
+df['diffuse flows normalized'] = (df['diffuse flows'] - valor_min) / (valor_max - valor_min)
 
-df = df.drop(columns=['Zone 1 Power Consumption', 'Temperature', 'Humidity'])
 
-df = df.round(3)
+df = df.drop(columns=['Zone 2  Power Consumption', 'Zone 3  Power Consumption', 'DateTime'])
 
-df.to_csv('Normalización de datos.csv', index=False)
+# Aplicar la función de escalado a las características normalizadas
+def standardize(samples):
+    samples_transposed = list(zip(*samples))
+    standardized_samples = []
+    for feature in samples_transposed:
+        mean = np.mean(feature)
+        std = np.std(feature)
+        standardized_feature = [(x - mean) / std for x in feature]
+        standardized_samples.append(standardized_feature)
+    standardized_samples = list(zip(*standardized_samples))
+    standardized_samples = [list(sample) for sample in standardized_samples]
+    return standardized_samples
 
-'''
-Implementación de la regresión lineal, debido a que mis datos no son clasificados
-'''
-samples = df[['Hour_normalized', 'Minute_normalized', 'Temperature normalized']].values.tolist()
+# Seleccionar las columnas normalizadas para la matriz de correlación
+normalized_features = [
+    'Zone 1 normalized', 
+    'Temperature normalized', 
+    'Humidity normalized', 
+    'Wind Speed normalized', 
+    'general diffuse flows normalized', 
+    'diffuse flows normalized',
+    'Hour_normalized',
+    'Minute_normalized',
+]
 
-y = df['Zone 1 normalized'].values.tolist()
+# Escalar las características normalizadas
+standardized_df = df[normalized_features].values
+standardized_df = standardize(standardized_df)
+df_standardized = pd.DataFrame(standardized_df, columns=normalized_features)
 
+# Calcular y visualizar la matriz de correlación
+corr_matrix = df[normalized_features].corr()
+plt.figure(figsize=(10, 6))
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+plt.title('Matriz de Correlación de Variables Normalizadas')
+plt.show()
+
+# Crear gráficos para cada característica en relación con 'Zone 1 normalized'
+for feature in normalized_features:
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(x=df[feature], y=df['Zone 1 normalized'])
+    plt.title(f'{feature} vs Zone 1 Power Consumption')
+    plt.xlabel(feature)
+    plt.ylabel('Zone 1 Power Consumption')
+    plt.show()
+
+# Mezclar y dividir el dataset en entrenamiento y prueba
+df = df.sample(frac=1).reset_index(drop=True)
+train_df = df[:int(0.8 * len(df))]
+test_df = df.drop(train_df.index)
+
+# Seleccionar las variables independientes (X) y la variable dependiente (y)
+features = ['Hour_normalized','Hour_sin','Wind Speed normalized','Temperature normalized', 'general diffuse flows normalized']
+X_train = train_df[features].values
+y_train = train_df['Zone 1 normalized'].values
+
+X_test = test_df[features].values
+y_test = test_df['Zone 1 normalized'].values
+
+# Añadir columna de unos (bias) a las muestras estandarizadas
+samples_train = np.c_[np.ones(X_train.shape[0]), standardize(X_train)]
+samples_test = np.c_[np.ones(X_test.shape[0]), standardize(X_test)]
+
+# Inicializar los parámetros
+params = np.random.randn(samples_train.shape[1]) 
+alfa = 0.1
+epochs = 0
 __erros__ = []
 
+# Función para calcular la hipótesis h(x) = θ0 + θ1*x1 + θ2*x2 + ... + θn*xn usando ciclos for
 def h(params, sample):
-    # Calcular la hipótesis (producto punto de los parámetros y las muestras)
-    acum = 0
+    hypothesis = 0
     for i in range(len(params)):
-        acum += params[i] * sample[i]
-    return acum
+        hypothesis += params[i] * sample[i]
+    return hypothesis
 
+# Función para mostrar el error cuadrático medio (MSE)
 def show_error(params, samples, y):
-    # Calcular el error cuadrático medio
     global __erros__
-    error_acum = 0
-    for i in range(len(samples)):
-        hyp = h(params, samples[i])
-        error = hyp - y[i]
-        error_acum += error ** 2
-    mean_error_param = error_acum / (2 * len(samples))
+    total_error = 0
+    m = len(samples)
+    
+    for i in range(m):
+        error = h(params, samples[i]) - y[i]
+        total_error += error**2
+    
+    mean_error_param = total_error / (2 * m)
     __erros__.append(mean_error_param)
     return mean_error_param
 
+# Función de descenso de gradiente para actualizar los parámetros θ usando ciclos for
 def GD(params, samples, y, alfa):
-    # Gradiente descendiente
     m = len(samples)
-    temp = [0] * len(params)
+    gradients = [0] * len(params)
+    
+    for i in range(m):
+        error = h(params, samples[i]) - y[i]
+        for j in range(len(params)):
+            gradients[j] += error * samples[i][j]
+    
     for j in range(len(params)):
-        acum = 0
-        for i in range(m):
-            error = h(params, samples[i]) - y[i]
-            acum += error * samples[i][j]
-        temp[j] = params[j] - (alfa / m) * acum
-    return temp
+        gradients[j] = gradients[j] / m
+        params[j] = params[j] - alfa * gradients[j]
+    
+    return params
 
-def scaling(samples):
-    # Escalado de las características
-    samples_transposed = list(zip(*samples))
-    scaled_samples = []
-    for i in range(len(samples_transposed)):  # Ignorar la primera columna si está presente
-        feature = list(samples_transposed[i])
-        avg = sum(feature) / len(feature)
-        max_val = max(feature)
-        scaled_feature = [(x - avg) / max_val for x in feature]
-        scaled_samples.append(scaled_feature)
-    scaled_samples = list(zip(*scaled_samples))
-    # Convertir las tuplas de nuevo a listas
-    scaled_samples = [list(sample) for sample in scaled_samples]
-    return scaled_samples
 
-# Inicializar los parámetros
-params = [0] * (len(samples[0]) + 1)  # n+1 porque añadimos la columna de unos
-alfa = 0.1
-epochs = 0
-
-# Agregar una columna de unos (para el término independiente)
-samples = [[1] + sample for sample in samples]
-
-samples = scaling(samples)
-
-errors = []
-
-for i in range(len(samples)):
-    if isinstance(samples[i], list):
-        samples[i] = [1] + samples[i]
-    else:
-        samples[i] = [1, samples[i]]
-
-#print("Original samples:")
-#print(samples)
-
-#print("Original samples:")
-#print(samples)
+# Entrenamiento del modelo
 while True:
-    oldparams = list(params)
-    #print("params")
-    params = GD(params, samples, y, alfa)
-    show_error(params, samples, y)
-    #print("params")
+    oldparams = params.copy()
+    params = GD(params, samples_train, y_train, alfa)
+    error = show_error(params, samples_train, y_train)
+    print(f"Epoch {epochs}, Error: {error}")
     epochs += 1
-    if oldparams == params or epochs == 1000:
-        #print("samples:")
-        #print(samples)
-        print("final params:")
+    if np.allclose(oldparams, params) or epochs == 10000:
+        print("Final params:")
         print(params)
         break
 
+def r_squared(y_true, y_pred):
+    ss_res = np.sum((y_true - y_pred) ** 2)  # Suma de los residuos al cuadrado
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)  # Suma total de los cuadrados
+    r2 = 1 - (ss_res / ss_tot)
+    return r2
 
-# Visualizar la gráfica de errores
+predictions = np.dot(samples_test, params)
+
+# Calcular R^2 para el conjunto de prueba
+r2_test = r_squared(y_test, predictions)
+print(f"R^2 en el conjunto de prueba: {r2_test:.4f}")
+
+# Graficar el error durante las épocas
 plt.plot(__erros__)
 plt.xlabel('Epochs')
 plt.ylabel('Mean Squared Error')
 plt.title('Error vs Epochs')
 plt.show()
 
+# Generar predicciones en el conjunto de prueba
 
-def calculate_r_squared(params, samples, y):
-    # Calcular las predicciones
-    predictions = [h(params, sample) for sample in samples]
-    
-    # Calcular el valor promedio de y
-    y_mean = np.mean(y)
-    
-    # Calcular la suma del cuadrado del error de predicción (SSE)
-    sse = sum((y_i - pred) ** 2 for y_i, pred in zip(y, predictions))
-    
-    # Calcular la suma total del cuadrado (SST)
-    sst = sum((y_i - y_mean) ** 2 for y_i in y)
-    
-    # Calcular el R^2
-    r_squared = 1 - (sse / sst)
-    
-    return r_squared
+# Graficar las predicciones y los valores reales
+plt.figure(figsize=(10, 6))
 
-# Calcular el coeficiente de determinación R^2
-r_squared_test = calculate_r_squared(params, samples, y)
-print(f"R^2 en el conjunto de prueba: {r_squared_test}")
+# Graficar los valores reales
+plt.scatter(range(len(y_test)), y_test, color='green', label='Valores Reales', alpha=0.6)
+
+# Graficar las predicciones
+plt.scatter(range(len(predictions)), predictions, color='blue', label='Predicciones', alpha=0.6)
+
+# Añadir etiquetas y título
+plt.xlabel('Índice')
+plt.ylabel('Consumo de Energía Normalizado')
+plt.title('Valores Reales vs Predicciones')
+plt.legend()
+plt.show()
