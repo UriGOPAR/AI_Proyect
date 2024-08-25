@@ -43,33 +43,23 @@ df['Minute_normalized'] = df['Minute'] / 60
 
 
 def zona_mayor_consumo(df):
-    # Sumar el consumo total para cada zona
+    #Poder saber la zona con mayor consumo total de energía y los dos meses con mayor consumo en esa zona
     consumo_zona_1 = df['Zone 1 Power Consumption'].sum()
     consumo_zona_2 = df['Zone 2  Power Consumption'].sum()
     consumo_zona_3 = df['Zone 3  Power Consumption'].sum()
 
-    # Determinar la zona con mayor consumo
     consumos = {'Zone 1': consumo_zona_1, 'Zone 2': consumo_zona_2, 'Zone 3': consumo_zona_3}
     zona_max_consumo = max(consumos, key=consumos.get)
     
     print(f"La zona con mayor consumo total de energía es: {zona_max_consumo} con un consumo de {consumos[zona_max_consumo]:.2f} unidades.")
-
-    # Seleccionar la columna correspondiente a la zona con mayor consumo
     columna_zona = f"{zona_max_consumo} Power Consumption"
-
-    # Sumar el consumo de energía por mes para esa zona
     consumo_por_mes = df.groupby('Month')[columna_zona].sum()
-
-    # Determinar los dos meses con mayor consumo
     top_2_meses = consumo_por_mes.nlargest(2)
 
     print(f"Los dos meses con mayor consumo en {zona_max_consumo} son:")
     for mes, consumo in top_2_meses.items():
         print(f"Mes: {mes}, Consumo: {consumo:.2f} unidades")
-
     return zona_max_consumo, top_2_meses
-
-# Llamar a la función con el dataframe
 zona_max_consumo, top_2_meses = zona_mayor_consumo(df)
 
 
@@ -156,7 +146,7 @@ sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f')
 plt.title('Matriz de Correlación de Variables Normalizadas')
 plt.show()
 
-# Crear gráficos para cada característica en relación con 'Zone 1 normalized'
+
 for feature in normalized_features:
     plt.figure(figsize=(8, 6))
     sns.scatterplot(x=df[feature], y=df['Zone 1 normalized'])
@@ -170,7 +160,6 @@ df = df.sample(frac=1).reset_index(drop=True)
 train_df = df[:int(0.8 * len(df))]
 test_df = df.drop(train_df.index)
 
-# Seleccionar las variables independientes (X) y la variable dependiente (y)
 features = ['Hour_normalized','Hour_sin','Wind Speed normalized','Temperature normalized', 'general diffuse flows normalized']
 X_train = train_df[features].values
 y_train = train_df['Zone 1 normalized'].values
@@ -182,13 +171,13 @@ y_test = test_df['Zone 1 normalized'].values
 samples_train = np.c_[np.ones(X_train.shape[0]), standardize(X_train)]
 samples_test = np.c_[np.ones(X_test.shape[0]), standardize(X_test)]
 
-# Inicializar los parámetros
+
 params = np.random.randn(samples_train.shape[1]) 
 alfa = 0.1
 epochs = 0
 __erros__ = []
 
-# Función para calcular la hipótesis h(x) = θ0 + θ1*x1 + θ2*x2 + ... + θn*xn usando ciclos for
+
 def h(params, sample):
     hypothesis = 0
     for i in range(len(params)):
@@ -239,36 +228,28 @@ while True:
         break
 
 def r_squared(y_true, y_pred):
-    ss_res = np.sum((y_true - y_pred) ** 2)  # Suma de los residuos al cuadrado
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)  # Suma total de los cuadrados
-    r2 = 1 - (ss_res / ss_tot)
+    # Calcular R^2 para saber qué tan bien se ajusta el modelo a los datos
+    ss_res = np.sum((y_true - y_pred) ** 2)  
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)  
     return r2
 
 predictions = np.dot(samples_test, params)
 
-# Calcular R^2 para el conjunto de prueba
 r2_test = r_squared(y_test, predictions)
 print(f"R^2 en el conjunto de prueba: {r2_test:.4f}")
 
-# Graficar el error durante las épocas
+
 plt.plot(__erros__)
 plt.xlabel('Epochs')
 plt.ylabel('Mean Squared Error')
 plt.title('Error vs Epochs')
 plt.show()
 
-# Generar predicciones en el conjunto de prueba
 
-# Graficar las predicciones y los valores reales
 plt.figure(figsize=(10, 6))
 
-# Graficar los valores reales
 plt.scatter(range(len(y_test)), y_test, color='green', label='Valores Reales', alpha=0.6)
-
-# Graficar las predicciones
 plt.scatter(range(len(predictions)), predictions, color='blue', label='Predicciones', alpha=0.6)
-
-# Añadir etiquetas y título
 plt.xlabel('Índice')
 plt.ylabel('Consumo de Energía Normalizado')
 plt.title('Valores Reales vs Predicciones')
