@@ -54,7 +54,7 @@ def zona_mayor_consumo(df):
     print(f"La zona con mayor consumo total de energía es: {zona_max_consumo} con un consumo de {consumos[zona_max_consumo]:.2f} unidades.")
     columna_zona = f"{zona_max_consumo} Power Consumption"
     consumo_por_mes = df.groupby('Month')[columna_zona].sum()
-    top_2_meses = consumo_por_mes.nlargest(2)
+    top_2_meses = consumo_por_mes.nlargest(5)
 
     print(f"Los dos meses con mayor consumo en {zona_max_consumo} son:")
     for mes, consumo in top_2_meses.items():
@@ -72,7 +72,7 @@ Normalizar las características 'Zone 1 Power Consumption', 'Temperature', 'Humi
 #df_august = df[df['Month'] == 8]
 #df = df_august.reset_index(drop=True)
 
-meses_seleccionados = [8, 7]
+meses_seleccionados = [8,7]
 df_seleccionado = df[df['Month'].isin(meses_seleccionados)].reset_index(drop=True)
 
 
@@ -146,7 +146,7 @@ sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f')
 plt.title('Matriz de Correlación de Variables Normalizadas')
 plt.show()
 
-
+'''
 for feature in normalized_features:
     plt.figure(figsize=(8, 6))
     sns.scatterplot(x=df[feature], y=df['Zone 1 normalized'])
@@ -154,13 +154,14 @@ for feature in normalized_features:
     plt.xlabel(feature)
     plt.ylabel('Zone 1 Power Consumption')
     plt.show()
+'''
 
 # Mezclar y dividir el dataset en entrenamiento y prueba
 df = df.sample(frac=1).reset_index(drop=True)
 train_df = df[:int(0.8 * len(df))]
 test_df = df.drop(train_df.index)
 
-features = ['Hour_normalized','Hour_sin','Wind Speed normalized','Temperature normalized', 'general diffuse flows normalized']
+features = ['Hour_normalized','Wind Speed','Temperature','general diffuse flows','diffuse flows','Humidity']
 X_train = train_df[features].values
 y_train = train_df['Zone 1 normalized'].values
 
@@ -168,9 +169,14 @@ X_test = test_df[features].values
 y_test = test_df['Zone 1 normalized'].values
 
 # Añadir columna de unos (bias) a las muestras estandarizadas
-samples_train = np.c_[np.ones(X_train.shape[0]), standardize(X_train)]
-samples_test = np.c_[np.ones(X_test.shape[0]), standardize(X_test)]
+samples_train = np.c_[np.ones((X_train.shape[0], 1)), standardize(X_train)]
+samples_test = np.c_[np.ones((X_test.shape[0], 1)), standardize(X_test)]
 
+def mse(predictions, targets):
+    return ((predictions - targets) ** 2).mean()
+
+errors_train = []
+errors_test = []
 
 params = np.random.randn(samples_train.shape[1]) 
 alfa = 0.1
@@ -178,11 +184,9 @@ epochs = 0
 __erros__ = []
 
 
-def h(params, sample):
-    hypothesis = 0
-    for i in range(len(params)):
-        hypothesis += params[i] * sample[i]
-    return hypothesis
+def h(params, samples):
+    return np.dot(samples, params)
+
 
 # Función para mostrar el error cuadrático medio (MSE)
 def show_error(params, samples, y):
@@ -199,7 +203,7 @@ def show_error(params, samples, y):
     return mean_error_param
 
 # Función de descenso de gradiente para actualizar los parámetros θ usando ciclos for
-def GD(params, samples, y, alfa):
+def GD(params, samples, y, alfa, lambda_reg):
     m = len(samples)
     gradients = [0] * len(params)
     
@@ -209,16 +213,33 @@ def GD(params, samples, y, alfa):
             gradients[j] += error * samples[i][j]
     
     for j in range(len(params)):
-        gradients[j] = gradients[j] / m
+        # Aplicar la regularización L2
+        if j == 0:  # No regularizar el parámetro de bias
+            gradients[j] = gradients[j] / m
+        else:
+            gradients[j] = (gradients[j] / m) + (lambda_reg / m) * params[j]
+        
         params[j] = params[j] - alfa * gradients[j]
     
     return params
 
+def calculate_mse(params, samples, y):
+    total_error = 0
+    m = len(samples)
+    for i in range(m):
+        error = h(params, samples[i]) - y[i]
+        total_error += error**2
+    mean_squared_error = total_error / m
+    return mean_squared_error
 
-# Entrenamiento del modelo
+
+
+lambda_reg = .1  # Este es el parámetro de regularización. Puedes ajustarlo según sea necesario.
+
+# Entrenamiento del modelo con regularización L2
 while True:
     oldparams = params.copy()
-    params = GD(params, samples_train, y_train, alfa)
+    params = GD(params, samples_train, y_train, alfa, lambda_reg)
     error = show_error(params, samples_train, y_train)
     print(f"Epoch {epochs}, Error: {error}")
     epochs += 1
@@ -227,10 +248,32 @@ while True:
         print(params)
         break
 
+for epoch in range(epochs):
+    # Actualización de parámetros, similar a tu función GD
+    params = GD(params, samples_train, y_train, alfa, lambda_reg)
+
+    # Predicciones en entrenamiento y prueba
+    predictions_train = h(params, samples_train)
+    predictions_test = h(params, samples_test)
+
+    # Cálculo de MSE para entrenamiento y prueba
+    mse_train = mse(predictions_train, y_train)
+    mse_test = mse(predictions_test, y_test)
+
+    # Almacenar errores en listas
+    errors_train.append(mse_train)
+    errors_test.append(mse_test)
+
+    # Opcional: imprimir el progreso
+    if epoch % 100 == 0:
+        print(f'Epoch {epoch}, Train MSE: {mse_train:.4f}, Test MSE: {mse_test:.4f}')
+
+
 def r_squared(y_true, y_pred):
     # Calcular R^2 para saber qué tan bien se ajusta el modelo a los datos
     ss_res = np.sum((y_true - y_pred) ** 2)  
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)  
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    r2 = 1 - (ss_res / ss_tot)
     return r2
 
 predictions = np.dot(samples_test, params)
@@ -255,3 +298,20 @@ plt.ylabel('Consumo de Energía Normalizado')
 plt.title('Valores Reales vs Predicciones')
 plt.legend()
 plt.show()
+
+plt.figure(figsize=(10, 5))
+plt.plot(errors_train, label='Train MSE')
+plt.plot(errors_test, label='Test MSE', linestyle='--')
+plt.title('Evolución del MSE durante el Entrenamiento')
+plt.xlabel('Época')
+plt.ylabel('MSE')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Después de finalizar el entrenamiento:
+mse_train = calculate_mse(params, samples_train, y_train)
+mse_test = calculate_mse(params, samples_test, y_test)
+
+print(f"MSE en el conjunto de entrenamiento: {mse_train:.4f}")
+print(f"MSE en el conjunto de prueba: {mse_test:.4f}")
