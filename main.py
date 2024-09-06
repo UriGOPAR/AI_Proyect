@@ -10,7 +10,6 @@ Convertir la columna 'DateTime' a formato de fecha y hora
 '''
 df = pd.read_csv('Tetuan City power consumption.csv')
 
-
 print(df.head())
 df.info()
 
@@ -40,8 +39,6 @@ df['Hour_cos'] = np.cos(2 * np.pi * df['Hour'] / 24)
 df['Hour_normalized'] = df['Hour'] / 24
 df['Minute_normalized'] = df['Minute'] / 60
 
-
-
 def zona_mayor_consumo(df):
     #Poder saber la zona con mayor consumo total de energía y los dos meses con mayor consumo en esa zona
     consumo_zona_1 = df['Zone 1 Power Consumption'].sum()
@@ -62,19 +59,11 @@ def zona_mayor_consumo(df):
     return zona_max_consumo, top_2_meses
 zona_max_consumo, top_2_meses = zona_mayor_consumo(df)
 
-
-
-'''
-Filtrar los meses por el mes de agosto 
-Eliminar las columnas 'Zone 2 Power Consumption', 'Zone 3 Power Consumption' y 'DateTime'
-Normalizar las características 'Zone 1 Power Consumption', 'Temperature', 'Humidity', 'Wind Speed', 'general diffuse flows' y 'diffuse flows'
-'''
-#df_august = df[df['Month'] == 8]
-#df = df_august.reset_index(drop=True)
-
-meses_seleccionados = [8,7]
+meses_seleccionados = [8,7,6]
 df_seleccionado = df[df['Month'].isin(meses_seleccionados)].reset_index(drop=True)
 
+count = df_seleccionado['Month'].value_counts()
+print(count)
 
 # Normalización de 'Zone 1 Power Consumption'
 valor_min = df['Zone 1 Power Consumption'].min()
@@ -105,7 +94,6 @@ df['general diffuse flows normalized'] = (df['general diffuse flows'] - valor_mi
 valor_min = df['diffuse flows'].min()
 valor_max = df['diffuse flows'].max()
 df['diffuse flows normalized'] = (df['diffuse flows'] - valor_min) / (valor_max - valor_min)
-
 
 df = df.drop(columns=['Zone 2  Power Consumption', 'Zone 3  Power Consumption', 'DateTime'])
 
@@ -146,63 +134,47 @@ sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f')
 plt.title('Matriz de Correlación de Variables Normalizadas')
 plt.show()
 
-'''
-for feature in normalized_features:
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=df[feature], y=df['Zone 1 normalized'])
-    plt.title(f'{feature} vs Zone 1 Power Consumption')
-    plt.xlabel(feature)
-    plt.ylabel('Zone 1 Power Consumption')
-    plt.show()
-'''
-
-# Mezclar y dividir el dataset en entrenamiento y prueba
+# Mezclar y dividir el dataset en entrenamiento, validación y prueba
 df = df.sample(frac=1).reset_index(drop=True)
-train_df = df[:int(0.8 * len(df))]
-test_df = df.drop(train_df.index)
+train_size = int(0.6 * len(df))
+valid_size = int(0.2 * len(df))
 
+train_df = df[:train_size]
+valid_df = df[train_size:train_size + valid_size]
+test_df = df[train_size + valid_size:]
+
+# Definir características y variable objetivo para cada conjunto
 features = ['Hour_normalized','Wind Speed','Temperature','general diffuse flows','diffuse flows','Humidity']
+
 X_train = train_df[features].values
 y_train = train_df['Zone 1 normalized'].values
+
+X_valid = valid_df[features].values
+y_valid = valid_df['Zone 1 normalized'].values
 
 X_test = test_df[features].values
 y_test = test_df['Zone 1 normalized'].values
 
 # Añadir columna de unos (bias) a las muestras estandarizadas
 samples_train = np.c_[np.ones((X_train.shape[0], 1)), standardize(X_train)]
+samples_valid = np.c_[np.ones((X_valid.shape[0], 1)), standardize(X_valid)]
 samples_test = np.c_[np.ones((X_test.shape[0], 1)), standardize(X_test)]
 
-def mse(predictions, targets):
-    return ((predictions - targets) ** 2).mean()
-
-errors_train = []
-errors_test = []
-
-params = np.random.randn(samples_train.shape[1]) 
-alfa = 0.1
-epochs = 0
-__erros__ = []
-
-
+# Función de predicción
 def h(params, samples):
     return np.dot(samples, params)
 
+# Función para calcular el error cuadrático medio (MSE)
+def mse(predictions, targets):
+    return ((predictions - targets) ** 2).mean()
 
-# Función para mostrar el error cuadrático medio (MSE)
-def show_error(params, samples, y):
-    global __erros__
-    total_error = 0
-    m = len(samples)
-    
-    for i in range(m):
-        error = h(params, samples[i]) - y[i]
-        total_error += error**2
-    
-    mean_error_param = total_error / (2 * m)
-    __erros__.append(mean_error_param)
-    return mean_error_param
+# Función para calcular R^2
+def r_squared(y_true, y_pred):
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return 1 - (ss_res / ss_tot)
 
-# Función de descenso de gradiente para actualizar los parámetros θ usando ciclos for
+
 def GD(params, samples, y, alfa, lambda_reg):
     m = len(samples)
     gradients = [0] * len(params)
@@ -213,8 +185,7 @@ def GD(params, samples, y, alfa, lambda_reg):
             gradients[j] += error * samples[i][j]
     
     for j in range(len(params)):
-        # Aplicar la regularización L2
-        if j == 0:  # No regularizar el parámetro de bias
+        if j == 0: 
             gradients[j] = gradients[j] / m
         else:
             gradients[j] = (gradients[j] / m) + (lambda_reg / m) * params[j]
@@ -223,95 +194,48 @@ def GD(params, samples, y, alfa, lambda_reg):
     
     return params
 
-def calculate_mse(params, samples, y):
-    total_error = 0
-    m = len(samples)
-    for i in range(m):
-        error = h(params, samples[i]) - y[i]
-        total_error += error**2
-    mean_squared_error = total_error / m
-    return mean_squared_error
+# Variables iniciales
+params = np.random.randn(samples_train.shape[1])
+lambda_reg = 0.0001
+alfa = 0.1
+epochs = 1000 
 
-
-
-lambda_reg = .1  # Este es el parámetro de regularización. Puedes ajustarlo según sea necesario.
+r2_train_list = []
+r2_valid_list = []
+r2_test_list = []
 
 # Entrenamiento del modelo con regularización L2
-while True:
-    oldparams = params.copy()
-    params = GD(params, samples_train, y_train, alfa, lambda_reg)
-    error = show_error(params, samples_train, y_train)
-    print(f"Epoch {epochs}, Error: {error}")
-    epochs += 1
-    if np.allclose(oldparams, params) or epochs == 10000:
-        print("Final params:")
-        print(params)
-        break
-
 for epoch in range(epochs):
-    # Actualización de parámetros, similar a tu función GD
+    # Actualizar parámetros con descenso de gradiente
     params = GD(params, samples_train, y_train, alfa, lambda_reg)
 
-    # Predicciones en entrenamiento y prueba
+    # Predicciones en los tres conjuntos
     predictions_train = h(params, samples_train)
+    predictions_valid = h(params, samples_valid)
     predictions_test = h(params, samples_test)
 
-    # Cálculo de MSE para entrenamiento y prueba
-    mse_train = mse(predictions_train, y_train)
-    mse_test = mse(predictions_test, y_test)
+    # Calcular R² para cada conjunto y convertir a porcentaje
+    r2_train = r_squared(y_train, predictions_train) * 100
+    r2_valid = r_squared(y_valid, predictions_valid) * 100
+    r2_test = r_squared(y_test, predictions_test) * 100
 
-    # Almacenar errores en listas
-    errors_train.append(mse_train)
-    errors_test.append(mse_test)
+    # Guardar R²
+    r2_train_list.append(r2_train)
+    r2_valid_list.append(r2_valid)
+    r2_test_list.append(r2_test)
 
-    # Opcional: imprimir el progreso
+    # Imprimir progreso
     if epoch % 100 == 0:
-        print(f'Epoch {epoch}, Train MSE: {mse_train:.4f}, Test MSE: {mse_test:.4f}')
+        print(f'Epoch {epoch}, Train R²: {r2_train:.2f}%, Valid R²: {r2_valid:.2f}%, Test R²: {r2_test:.2f}%')
 
-
-def r_squared(y_true, y_pred):
-    # Calcular R^2 para saber qué tan bien se ajusta el modelo a los datos
-    ss_res = np.sum((y_true - y_pred) ** 2)  
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    r2 = 1 - (ss_res / ss_tot)
-    return r2
-
-predictions = np.dot(samples_test, params)
-
-r2_test = r_squared(y_test, predictions)
-print(f"R^2 en el conjunto de prueba: {r2_test:.4f}")
-
-
-plt.plot(__erros__)
-plt.xlabel('Epochs')
-plt.ylabel('Mean Squared Error')
-plt.title('Error vs Epochs')
-plt.show()
-
-
+# Graficar la evolución de R² en porcentaje para entrenamiento, validación y prueba
 plt.figure(figsize=(10, 6))
-
-plt.scatter(range(len(y_test)), y_test, color='green', label='Valores Reales', alpha=0.6)
-plt.scatter(range(len(predictions)), predictions, color='blue', label='Predicciones', alpha=0.6)
-plt.xlabel('Índice')
-plt.ylabel('Consumo de Energía Normalizado')
-plt.title('Valores Reales vs Predicciones')
-plt.legend()
-plt.show()
-
-plt.figure(figsize=(10, 5))
-plt.plot(errors_train, label='Train MSE')
-plt.plot(errors_test, label='Test MSE', linestyle='--')
-plt.title('Evolución del MSE durante el Entrenamiento')
+plt.plot(r2_train_list, label='Train R²')
+plt.plot(r2_valid_list, label='Valid R²', linestyle='--')
+plt.plot(r2_test_list, label='Test R²', linestyle=':')
+plt.title('Evolución de R² durante el Entrenamiento (en porcentaje)')
 plt.xlabel('Época')
-plt.ylabel('MSE')
+plt.ylabel('R² (%)')
 plt.legend()
 plt.grid(True)
 plt.show()
-
-# Después de finalizar el entrenamiento:
-mse_train = calculate_mse(params, samples_train, y_train)
-mse_test = calculate_mse(params, samples_test, y_test)
-
-print(f"MSE en el conjunto de entrenamiento: {mse_train:.4f}")
-print(f"MSE en el conjunto de prueba: {mse_test:.4f}")
