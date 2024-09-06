@@ -34,8 +34,8 @@ df['Minute_normalized'] = df['Minute'] / 60
 df['Zone 1 normalized'] = (df['Zone 1 Power Consumption'] - df['Zone 1 Power Consumption'].min()) / \
                            (df['Zone 1 Power Consumption'].max() - df['Zone 1 Power Consumption'].min())
 
-# Filtrar los meses de julio y agosto
-meses_seleccionados = [7, 8]
+
+meses_seleccionados = [7, 8,6]
 df = df[df['Month'].isin(meses_seleccionados)].reset_index(drop=True)
 
 # Eliminar columnas innecesarias
